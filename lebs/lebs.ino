@@ -12,21 +12,45 @@
 #include <MenuSystem.h>
 #include <LiquidCrystal.h>
 #include <avr/pgmspace.h>
+#include <EEPROM.h>
 
 #define LCD_COL 20
-//#define BUFFER_SIZE 20
+#define MENU_LEVEL1_COUNT 4
 
-const char string_0[] PROGMEM = "Check Status";   // "String 0" etc are strings to store - change to suit.
-const char string_1[] PROGMEM = "Start Mashing";
-const char string_2[] PROGMEM = "Load Reciepe";
-const char string_3[] PROGMEM = "Remove Ramp";
-//const char string_4[] PROGMEM = "String 4";
-//const char string_5[] PROGMEM = "String 5";
+#define BTN_OK 
+#define BTN_NEXT;
+#define BTN_PREV;
+#define BTN_BACK;
+#define BTN_UP;
+#define BTN_DOWN;
 
+const char string_0[] PROGMEM = "Create Recipe";  //Mode 0
+const char string_1[] PROGMEM = "Load Recipe"; //Mode 1
+const char string_2[] PROGMEM = "Start Mashing"; //Mode 2
+const char string_3[] PROGMEM = "Check Status" ; //Mode 3
 
-// Then set up a table to refer to your strings.
+const char string_4[] PROGMEM = "Add Ramp"; //SubMode 0
+const char string_5[] PROGMEM = "Remove Ramp"; //SubMode 1
+
+const char recipe_num[] PROGMEM = "Recipe #";
+const char ramp_num[] PROGMEM = "Ramp #";
 
 const char* const main_menu_text[] PROGMEM = {string_0, string_1, string_2, string_3};
+
+const char* const create_recipe_menu_text[] PROGMEM = {string_4, string_5}; 
+
+typedef struct ramp{
+  float temperatureSetPoint;
+  int duration;
+  bool pump;
+}ramp; // 7 bytes
+
+
+typedef struct recipe{
+  ramp ramps[10];
+  int rampsCount;
+}recipe; //74 bytes
+
 
 char buffer [LCD_COL];
 // renderer
@@ -40,9 +64,11 @@ char buffer [LCD_COL];
 //    * LCD D7 pin to digital pin 7
 //    * LCD R/W pin to ground
 LiquidCrystal lcd = LiquidCrystal(31, 33, 35, 37, 39, 41);
+
 int lcdRow = 0;
 int currentMode;
-
+int currentSubMode;
+int menuLevel = 0;
 class MyRenderer : public MenuComponentRenderer {
 public:
     void render(Menu const& menu) const {
@@ -117,17 +143,17 @@ void serial_handler() {
     char inChar;
     if ((inChar = Serial.read()) > 0) {
         switch (inChar) {
-            case 'a': // Previus item
-                changeMode(0);
+            case '1': // Previus item
+                buttonPrev();
                 break;
-            case 's': // Next item
-                changeMode(1);
+            case '2': // Next item
+                buttonNext();
                 break;
-            case 'd': // Back presed
-                changeMode(2);
+            case '3': // Back presed
+                buttonOK();
                 break;
-            case 'f':
-               selectCurrentMode();
+            case '4':
+               buttonBack();
                break;
             case '?':
             case 'h': // Display help
@@ -150,7 +176,7 @@ void setup() {
 
     memset(buffer, '\0', 20);
 
-    serial_print_help();
+    //serial_print_help();
 
     initMenu();
 }
@@ -174,6 +200,7 @@ void initMenu(){
   setCursor(0, 1);
   printCenter("Brewing System v1");
   setCursor(0, 3);
+  printCenter("Press OK to Start");
 }
 
 void printCenter(const char* str){
@@ -192,10 +219,8 @@ void clearRow(){
   setCursor(0, lcdRow);
 }
 
-void changeMode(int mode){
-  currentMode = mode;
+void changeMode(){
   strcpy_P(buffer, (char*)pgm_read_word(&(main_menu_text[currentMode])));
-  Serial.println(buffer);
   Serial.println(buffer);
   printMenuOption();
 }
@@ -206,6 +231,15 @@ void selectCurrentMode(){
   printCenter(buffer);
   setCursor(0, 3);
   clearRow();
+  currentSubMode = 0;  
+}
+
+void selectCurrentSubMode(){
+  if(currentMode == 0){//Create reciepe
+    strcpy_P(buffer, (char*)pgm_read_word(&(create_recipe_menu_text[currentMode])));
+    printCenter(buffer);
+    setCursor(0, 3);
+  }
 }
 
 void printMenuOption(){
@@ -220,5 +254,49 @@ void printMenuOption(){
   lcd.print(buffer);
   setCursor(LCD_COL - 1, lcdRow);
   lcd.print(">");
+}
+
+void saveReciepe(recipe r, int recipeId){
+  EEPROM.put(recipeId * sizeof(recipe), r);
+}
+
+recipe loadReciepe(int recipeId){
+  recipe result;
+  EEPROM.get(recipeId * sizeof(recipe), result);
+  return result; 
+}
+
+void addRamp(){
+
+}
+
+void printReciepe(){
+
+}
+
+void buttonOK(){
+  if(menuLevel < 2){
+    menuLevel++;
+  }
+
+  if(menuLevel == 1){
+    selectCurrentMode();
+  }
+}
+
+void buttonBack(){
+  if(menuLevel > 0){
+    menuLevel--;
+  }
+}
+
+void buttonNext(){
+  currentMode = currentMode++ % MENU_LEVEL1_COUNT;
+  changeMode();
+}
+
+void buttonPrev(){
+  currentMode = currentMode-- % MENU_LEVEL1_COUNT;
+  changeMode();
 }
 
