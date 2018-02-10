@@ -9,7 +9,6 @@
  * Licensed under the MIT license (see LICENSE)
  */
 
-#include <MenuSystem.h>
 #include <LiquidCrystal.h>
 #include <avr/pgmspace.h>
 #include <EEPROM.h>
@@ -23,6 +22,8 @@
 #define BTN_BACK;
 #define BTN_UP;
 #define BTN_DOWN;
+
+#define TEMPERATURE_SENSOR_PIN A15
 
 const char string_0[] PROGMEM = "Create Recipe";  //Mode 0
 const char string_1[] PROGMEM = "Load Recipe"; //Mode 1
@@ -66,67 +67,10 @@ char buffer [LCD_COL];
 LiquidCrystal lcd = LiquidCrystal(31, 33, 35, 37, 39, 41);
 
 int lcdRow = 0;
-int currentMode;
-int currentSubMode;
+int currentMode = 0;
+int currentSubMode = 0;
 int menuLevel = 0;
-class MyRenderer : public MenuComponentRenderer {
-public:
-    void render(Menu const& menu) const {
-        lcd.setCursor(0, 4);
-        lcdRow = 4;
-        lcd.print(menu.get_name());
-        menu.get_current_component()->render(*this);
-    }
-
-    void render_menu_item(MenuItem const& menu_item) const {
-        lcd.print(menu_item.get_name());
-    }
-
-    void render_back_menu_item(BackMenuItem const& menu_item) const {
-        lcd.print(menu_item.get_name());
-    }
-
-    void render_numeric_menu_item(NumericMenuItem const& menu_item) const {
-        lcd.print(menu_item.get_name());
-    }
-
-    void render_menu(Menu const& menu) const {
-        lcd.print(menu.get_name());
-    }
-};
-MyRenderer my_renderer;
-
-// Forward declarations
-
-void on_item1_selected(MenuComponent* p_menu_component);
-void on_item2_selected(MenuComponent* p_menu_component);
-void on_item3_selected(MenuComponent* p_menu_component);
-
-// Menu variables
-
-MenuSystem ms(my_renderer);
-MenuItem miStart("Start Mashing", &on_item1_selected);
-MenuItem miAddRamp("Add Ramp", &on_item1_selected);
-
-// Menu callback function
-
-void on_item1_selected(MenuComponent* p_menu_component) {
-//    lcd.setCursor(0,1);
-//    lcd.print("Item1 Selected  ");
-//    delay(1500); // so we can look the result on the LCD
-}
-
-void on_item2_selected(MenuComponent* p_menu_component) {
-//    lcd.setCursor(0,1);
-//    lcd.print("Item2 Selected  ");
-//    delay(1500); // so we can look the result on the LCD
-}
-
-void on_item3_selected(MenuComponent* p_menu_component) {
-//    lcd.setCursor(0,1);
-//    lcd.print("Item3 Selected  ");
-//    delay(1500); // so we can look the result on the LCD
-}
+float temperature = 0.0;
 
 void serial_print_help() {
     Serial.println("***************");
@@ -162,6 +106,9 @@ void serial_handler() {
             case 'c':
               lcd.clear();
               break;
+            case 't':
+              readTemperature();
+              Serial.println(temperature);
             default:
                 break;
         }
@@ -208,7 +155,6 @@ void printCenter(const char* str){
   int leadingSpaces = (LCD_COL - strlen(str)) / 2;
   lcd.setCursor(leadingSpaces, lcdRow);
   lcd.print(str);
-  //setCursor(0, lcdRow);
 }
 
 void clearRow(){
@@ -223,6 +169,10 @@ void changeMode(){
   strcpy_P(buffer, (char*)pgm_read_word(&(main_menu_text[currentMode])));
   Serial.println(buffer);
   printMenuOption();
+}
+
+void changeSubMode(){
+  
 }
 
 void selectCurrentMode(){
@@ -246,10 +196,7 @@ void printMenuOption(){
   setCursor(0, 3);
   clearRow();
   lcd.print("<");
-  Serial.println(buffer);
   int leadingSpaces = (LCD_COL - strlen(buffer)) / 2;                      
-  Serial.println(buffer);
-  Serial.println(leadingSpaces);
   setCursor(leadingSpaces, lcdRow);
   lcd.print(buffer);
   setCursor(LCD_COL - 1, lcdRow);
@@ -275,12 +222,13 @@ void printReciepe(){
 }
 
 void buttonOK(){
-  if(menuLevel < 2){
-    menuLevel++;
-  }
-
+  
   if(menuLevel == 1){
     selectCurrentMode();
+  }
+  
+  if(menuLevel < 2){
+    menuLevel++;
   }
 }
 
@@ -291,12 +239,33 @@ void buttonBack(){
 }
 
 void buttonNext(){
-  currentMode = currentMode++ % MENU_LEVEL1_COUNT;
-  changeMode();
+  if(menuLevel == 1){
+    currentMode = ++currentMode % MENU_LEVEL1_COUNT;
+    changeMode();
+  }
+  else if(menuLevel == 2){
+    currentSubMode = ++currentSubMode % 0;
+    changeSubMode();
+  }
 }
 
 void buttonPrev(){
-  currentMode = currentMode-- % MENU_LEVEL1_COUNT;
-  changeMode();
+  if(menuLevel == 1){
+    currentMode = --currentMode;
+    if(currentMode < 0){
+      currentMode = MENU_LEVEL1_COUNT - 1;
+    }
+    changeMode();
+  }
+}
+
+void readTemperature(){
+  temperature = ( 5.0 * analogRead(TEMPERATURE_SENSOR_PIN) * 100.0) / 1024.0;  
+}
+
+void buttonUp(){
+}
+
+void buttonDown(){
 }
 
