@@ -30,15 +30,18 @@ const char string_1[] PROGMEM = "Load Recipe"; //Mode 1
 const char string_2[] PROGMEM = "Start Mashing"; //Mode 2
 const char string_3[] PROGMEM = "Check Status" ; //Mode 3
 
-const char string_4[] PROGMEM = "Add Ramp"; //SubMode 0
-const char string_5[] PROGMEM = "Remove Ramp"; //SubMode 1
+const char string_4[] PROGMEM = "Add Ramp"; //SubMode 00
+const char string_5[] PROGMEM = "Remove Ramp"; //SubMode 01
+const char string_6[] PROGMEM = "Save Recipe"; //SubMode 02
 
 const char recipe_num[] PROGMEM = "Recipe #";
 const char ramp_num[] PROGMEM = "Ramp #";
 
 const char* const main_menu_text[] PROGMEM = {string_0, string_1, string_2, string_3};
 
-const char* const create_recipe_menu_text[] PROGMEM = {string_4, string_5}; 
+const char* const create_recipe_menu_text[] PROGMEM = {string_4, string_5, string_6}; 
+
+const int MENU_LEVEL2_COUNT[] PROGMEM = {3, 0, 0, 0};
 
 typedef struct ramp{
   float temperatureSetPoint;
@@ -50,7 +53,7 @@ typedef struct ramp{
 typedef struct recipe{
   ramp ramps[10];
   int rampsCount;
-}recipe; //74 bytes
+} recipe; //74 bytes
 
 
 char buffer [LCD_COL];
@@ -69,6 +72,7 @@ LiquidCrystal lcd = LiquidCrystal(31, 33, 35, 37, 39, 41);
 int lcdRow = 0;
 int currentMode = 0;
 int currentSubMode = 0;
+int currentSubSubMode = 0;
 int menuLevel = 0;
 float temperature = 0.0;
 
@@ -99,6 +103,12 @@ void serial_handler() {
             case '4':
                buttonBack();
                break;
+            case '5':
+                buttonDown();
+                break;
+            case '6':
+                buttonUp();
+                break;
             case '?':
             case 'h': // Display help
                 serial_print_help();
@@ -141,6 +151,7 @@ void setCursor(int col, int row){
   lcd.setCursor(col, row);
 }
 
+
 void initMenu(){
   lcdHome();
   printCenter("La Extraditable");
@@ -148,6 +159,13 @@ void initMenu(){
   printCenter("Brewing System v1");
   setCursor(0, 3);
   printCenter("Press OK to Start");
+}
+
+void initWorkMenu(){
+  lcd.clear();
+  lcdHome();
+  printCenter("LEBS v1");
+  setCursor(0,1);
 }
 
 void printCenter(const char* str){
@@ -172,23 +190,41 @@ void changeMode(){
 }
 
 void changeSubMode(){
-  
+  if(currentMode == 0){
+    strcpy_P(buffer, (char*)pgm_read_word(&(create_recipe_menu_text[currentSubMode])));
+  }
+
+  printMenuOption();
+}
+
+void changeSubSubMode(){
+  if(currentMode == 0){ //Create Recipe
+    if(currentSubMode == 0){ //Add Ramp
+      setCursor(0, 3);
+      clearRow();
+      printCenter("SP=50C t=40min P=ON");
+    }
+  }
 }
 
 void selectCurrentMode(){
-  setCursor(0, 2);
+  setCursor(0, 1);
   strcpy_P(buffer, (char*)pgm_read_word(&(main_menu_text[currentMode])));
   printCenter(buffer);
-  setCursor(0, 3);
+  setCursor(0, 2);
   clearRow();
-  currentSubMode = 0;  
+  currentSubMode = 0; 
+  changeSubMode(); 
 }
 
 void selectCurrentSubMode(){
   if(currentMode == 0){//Create reciepe
+    setCursor(0,3);
     strcpy_P(buffer, (char*)pgm_read_word(&(create_recipe_menu_text[currentMode])));
     printCenter(buffer);
     setCursor(0, 3);
+    clearRow();
+    changeSubSubMode();
   }
 }
 
@@ -222,9 +258,17 @@ void printReciepe(){
 }
 
 void buttonOK(){
-  
+  if(menuLevel == 0){
+    initWorkMenu();
+    changeMode();
+  }
+ 
   if(menuLevel == 1){
     selectCurrentMode();
+  }
+
+  if(menuLevel == 2){
+    selectCurrentSubMode();
   }
   
   if(menuLevel < 2){
@@ -235,6 +279,10 @@ void buttonOK(){
 void buttonBack(){
   if(menuLevel > 0){
     menuLevel--;
+    
+    if(menuLevel == 0){
+      menuLevel = 0;
+    }
   }
 }
 
@@ -244,7 +292,9 @@ void buttonNext(){
     changeMode();
   }
   else if(menuLevel == 2){
-    currentSubMode = ++currentSubMode % 0;
+    int maxItem = (int)pgm_read_word(&(MENU_LEVEL2_COUNT[currentMode]));
+    Serial.println("maxitens:" + maxItem);
+    currentSubMode = ++currentSubMode % maxItem;
     changeSubMode();
   }
 }
@@ -257,6 +307,14 @@ void buttonPrev(){
     }
     changeMode();
   }
+  else if(menuLevel == 2){
+    currentSubMode = --currentSubMode;
+    if(currentSubMode < 0){
+      int maxItem = (int)pgm_read_word(&(MENU_LEVEL2_COUNT[currentMode]));
+      Serial.println("maxitens:" + maxItem);
+      currentSubMode = maxItem - 1;
+    }
+  }
 }
 
 void readTemperature(){
@@ -264,6 +322,7 @@ void readTemperature(){
 }
 
 void buttonUp(){
+  
 }
 
 void buttonDown(){
