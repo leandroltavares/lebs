@@ -1,11 +1,24 @@
-
 /*
- * lcd_nav.ino - Example code using the menu system library
+ * lebs.ino - LEBS v1 - La Extraditable Brewing System v1.0
  *
- * This example shows using the menu system with a 16x2 LCD display
- * (controled over serial).
+ * This is the controller code of automatic brewing kettle
+ * This code allows the storage of 10 recipes with maximum 10 boiling ramps each 
+ * This code allows the temperature control using PID 
+ * This code allows the a mash circulation pump
+ * This code monitors the kettle state and provides feedback during whole brewing preparation
+ * This code may contain bugs, although our beer is hopefully bug-free.
+ * 
+ * Important things:
+ * All units here are S.I. (Celsius, minutes, liters, ...)
+ * The PID parameters are tuned for a XXX liters kettle
+ * The pump can be continously on, or periodically (by default: 10 seconds on, 10 seconds off)
+ * 
+ * Authors:
+ * Alan Groblackner
+ * Guilherme Godoy Guerreiro
+ * Leandro Luciani Tavares (leandro.ltavares@gmail.com)
  *
- * Copyright (c) 2015 arduino-menusystem
+ * Copyright (c) 2017 La Extraditable Brewing & Automation Company
  * Licensed under the MIT license (see LICENSE)
  */
 
@@ -25,6 +38,10 @@
 
 #define TEMPERATURE_SENSOR_PIN A15
 
+#define MAX_TEMPERATURE 120
+#define MIN_TEMPERATURE 20
+#define PUMP_DUTY_TIME 10
+
 const char string_0[] PROGMEM = "Create Recipe";  //Mode 0
 const char string_1[] PROGMEM = "Load Recipe"; //Mode 1
 const char string_2[] PROGMEM = "Start Mashing"; //Mode 2
@@ -34,6 +51,10 @@ const char string_4[] PROGMEM = "Add Ramp"; //SubMode 00
 const char string_5[] PROGMEM = "Remove Ramp"; //SubMode 01
 const char string_6[] PROGMEM = "Save Recipe"; //SubMode 02
 
+const char string_7[] PROGMEM = "Temperature(C) ="; //SubSubMode 001
+const char string_8[] PROGMEM = "Duration(min) ="; //SubSubMode 002
+const char string_9[] PROGMEM = "Pump ="; //SubSubMode 003
+
 const char recipe_num[] PROGMEM = "Recipe #";
 const char ramp_num[] PROGMEM = "Ramp #";
 
@@ -41,20 +62,28 @@ const char* const main_menu_text[] PROGMEM = {string_0, string_1, string_2, stri
 
 const char* const create_recipe_menu_text[] PROGMEM = {string_4, string_5, string_6}; 
 
+const char* const add_ramp_menu_text[] PROGMEM = {string_7, string_8, string_9};
+
+const char* const pump_options[] PROGMEM = {"ON", "OSC", "OFF"};
+
+const char* const print_ramp_text[] PROGMEM = {"SP=", "t=", "P="};
+
 const int MENU_LEVEL2_COUNT[] PROGMEM = {3, 0, 0, 0};
 
 typedef struct ramp{
-  float temperatureSetPoint;
-  int duration;
-  bool pump;
+  float temperature;
+  short duration;
+  short pump;
 }ramp; // 7 bytes
 
 
 typedef struct recipe{
   ramp ramps[10];
-  int rampsCount;
+  short rampsCount;
 } recipe; //74 bytes
 
+
+ramp currentRamp;
 
 char buffer [LCD_COL];
 // renderer
@@ -142,6 +171,10 @@ void loop() {
     serial_handler();
 }
 
+void readButton(){
+  
+}
+
 void lcdHome(){
   setCursor(0,0);
 }
@@ -193,18 +226,20 @@ void changeSubMode(){
   if(currentMode == 0){
     strcpy_P(buffer, (char*)pgm_read_word(&(create_recipe_menu_text[currentSubMode])));
   }
-
   printMenuOption();
 }
 
 void changeSubSubMode(){
+  setCursor(0, 3);
+  clearRow();
+     
   if(currentMode == 0){ //Create Recipe
     if(currentSubMode == 0){ //Add Ramp
-      setCursor(0, 3);
-      clearRow();
-      printCenter("SP=50C t=40min P=ON");
+      strcpy_P(buffer, (char*)pgm_read_word(&(add_ramp_menu_text[currentSubMode])));
+          
     }
   }
+  printMenuOption();
 }
 
 void selectCurrentMode(){
@@ -257,6 +292,9 @@ void printReciepe(){
 
 }
 
+void printRamp(){
+}
+
 void buttonOK(){
   if(menuLevel == 0){
     initWorkMenu();
@@ -271,7 +309,7 @@ void buttonOK(){
     selectCurrentSubMode();
   }
   
-  if(menuLevel < 2){
+  if(menuLevel < 3){
     menuLevel++;
   }
 }
@@ -313,7 +351,15 @@ void buttonPrev(){
       int maxItem = (int)pgm_read_word(&(MENU_LEVEL2_COUNT[currentMode]));
       Serial.println("maxitens:" + maxItem);
       currentSubMode = maxItem - 1;
+      changeSubMode();
     }
+  }
+  else if(menuLevel == 3){
+    currentSubSubMode = --currentSubSubMode;
+
+    if(currentSubSubMode < 0){
+      currentSubSubMode = 2; //Fixed for 3 option, maybe should be changed latter
+    }    
   }
 }
 
@@ -322,9 +368,34 @@ void readTemperature(){
 }
 
 void buttonUp(){
-  
+  if(currentMode = 0 && currentSubMode == 0){
+    if(menuLevel == 3){
+      if(currentSubMode == 0){
+        currentRamp.temperature = max(currentRamp.temperature++, MAX_TEMPERATURE);
+      }
+      else if(currentSubMode == 1){
+        currentRamp.duration = max(currentRamp.duration++, 2);
+      }
+      else if(currentSubMode == 2){
+        currentRamp.pump = max(currentRamp.pump++, 2);
+      }
+    }
+  }
 }
 
 void buttonDown(){
+    if(currentMode = 0 && currentSubMode == 0){
+    if(menuLevel == 3){
+      if(currentSubMode == 0){
+        currentRamp.temperature = min(currentRamp.temperature--, MIN_TEMPERATURE);
+      }
+      else if(currentSubMode == 1){
+        currentRamp.duration = max(currentRamp.duration--, 0);
+      }
+      else if(currentSubMode == 2){
+        currentRamp.pump = max(currentRamp.pump--, 0);
+      }
+    }
+  }
 }
 
