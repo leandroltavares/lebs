@@ -18,13 +18,15 @@
  * Guilherme Godoy Guerreiro
  * Leandro Luciani Tavares (leandro.ltavares@gmail.com)
  *
- * Copyright (c) 2017 La Extraditable Brewing & Automation Company
+ * Copyright (c) 2018 La Extraditable Brewing & Automation Company
  * Licensed under the MIT license (see LICENSE)
  */
 
 #include <LiquidCrystal.h>
 #include <avr/pgmspace.h>
 #include <EEPROM.h>
+#include <PID_v1.h>
+
 
 #define LCD_COL 20
 #define MENU_LEVEL1_COUNT 4
@@ -37,10 +39,16 @@
 #define BTN_DOWN;
 
 #define TEMPERATURE_SENSOR_PIN A15
+#define RESISTANCE_OUTPUT_PIN 13
 
 #define MAX_TEMPERATURE 120
 #define MIN_TEMPERATURE 20
 #define PUMP_DUTY_TIME 10
+
+//TODO: Leandro, search optimal parameters
+#define KP 1
+#define KI 5
+#define KD 1
 
 const char string_0[] PROGMEM = "Create Recipe";  //Mode 0
 const char string_1[] PROGMEM = "Load Recipe"; //Mode 1
@@ -85,6 +93,9 @@ typedef struct recipe{
 
 ramp currentRamp;
 
+recipe currentRecipe;
+int currentRampIndex;
+
 char buffer [LCD_COL];
 // renderer
 
@@ -103,7 +114,14 @@ int currentMode = 0;
 int currentSubMode = 0;
 int currentSubSubMode = 0;
 int menuLevel = 0;
-float temperature = 0.0;
+
+double currentTemperature = 0.0;
+double setpointTemperature = 0.0;
+double pidOutput;
+int WindowSize = 5000;
+unsigned long windowStartTime;
+
+PID temperaturePID(&currentTemperature, &setpointTemperature, &pidOutput, KP, KD, KI, DIRECT);
 
 void serial_print_help() {
     Serial.println("***************");
@@ -147,7 +165,7 @@ void serial_handler() {
               break;
             case 't':
               readTemperature();
-              Serial.println(temperature);
+              Serial.println(currentTemperature);
             default:
                 break;
         }
@@ -364,7 +382,7 @@ void buttonPrev(){
 }
 
 void readTemperature(){
-  temperature = ( 5.0 * analogRead(TEMPERATURE_SENSOR_PIN) * 100.0) / 1024.0;  
+  currentTemperature = ( 5.0 * analogRead(TEMPERATURE_SENSOR_PIN) * 100.0) / 1024.0;  
 }
 
 void buttonUp(){
@@ -396,6 +414,32 @@ void buttonDown(){
         currentRamp.pump = max(currentRamp.pump--, 0);
       }
     }
+  }
+}
+
+void startControlLoop(){
+  windowStartTime = millis();
+
+  temperaturePID.SetOutputLimits(0, WindowSize);
+  temperaturePID.SetTunings(KP, KI, KD);
+  temperaturePID.SetMode(AUTOMATIC);
+}
+
+void runControlLoop(){
+
+ //TODO LEANDRO: reach set point, change pump mode, keep temperature though the desired amount of time, iterate over the ramps.
+  temperaturePID.Compute();
+   
+  unsigned long now = millis();
+  if (now - windowStartTime > WindowSize)
+  { //time to shift the Relay Window
+    windowStartTime += WindowSize;
+  }
+  if (pidOutput > now - windowStartTime){
+    digitalWrite(RESISTANCE_OUTPUT_PIN, HIGH);
+  }
+  else{ 
+    digitalWrite(RESISTANCE_OUTPUT_PIN, LOW);
   }
 }
 
